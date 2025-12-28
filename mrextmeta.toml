@@ -1,3 +1,12 @@
-name = "MangaDex"
-version = "1.2.1"
+mangaright = "0.1.0"
+
+[plugin]
+id = "0b035abc-ec01-11eb-850d-784f43a622c7"
+
+[plugin.name]
+primary = "mangadex"
+aliases = []
+
+[plugin.general]
+version = "2.0.0"
 author = "rcribbs"

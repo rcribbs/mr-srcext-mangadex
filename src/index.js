@@ -1,49 +1,61 @@
+// @flow
+//import "core-js/stable";
 import "core-js/features/url";
 
 class ChapterListItem {
-    number = "";
+    number: string;
     // Number is the chapter number. Could be an actual number like "1" or could
     // be a special chapter like "EX" or "Omake".
     //
-    title = "";
+    title: string;
     // Name is the short title of the chapter.
     // 
-    description = "";
+    description: string;
     // Description is the longer description of the chapter. May be blank
     // depending on the way the website handles information about chapters.
     // 
-    identifier = "";
+    identifier: string;
     // Identifier is a source-specific identifier. Could be an id like "1234" or
     // anything that makes sense for this source. This identifier will be
     // provided in getChapter call as chapterIdentifier to retrieve the chapter
     // pages.
     // 
-    group = null
+    group: ?string
     // Optional: Scanalation group if one exists.
     // 
-    variant = null
+    variant: ?string
     // Optional: Set variant if there are multiple versions of the same chapter
     //           and group is not present or not enough to differintiate.
     //
-    created = null;
+    created: ?Date
     // Optional: Date created as a string if it exists.
 
-    created = null;
+    updated: ?Date
     // Optional: Date updated as a string if it exists.
 
-    published = null;
+    published: ?Date
     // Optional: Date of original chapter's publication as a string if it exists.
 
     constructor({
         number,
         identifier,
         title,
-        description = null,
+        description = "",
         group = null,
         variant = null,
         created = null,
         updated = null,
         published = null,
+    }: {
+        number: string,
+        identifier: string,
+        title: string,
+        description?: string,
+        group?: ?string,
+        variant?: ?string,
+        created?: ?Date,
+        updated?: ?Date,
+        published?: ?Date,
     }) {
         this.number = number;
         this.identifier = identifier;
@@ -58,83 +70,127 @@ class ChapterListItem {
 }
 
 class ChapterList {
-    chapters = [];
+    chapters: Array<ChapterListItem>;
     // Chapters contains all the chapters for a given manga series.
     //
 
-    constructor({ chapters }) {
+    constructor({ chapters }: { chapters: Array<ChapterListItem> }) {
         this.chapters = chapters;
     }
 }
 
-class ChapterData {
-    pageUrls = [];
-    // PageUrls contains all the page urls for the chapter.
 
-    constructor({ pageUrls }) {
-        this.pageUrls = pageUrls;
+type PageDataHandler = (string) => (string);
+
+class PageData {
+    version: string = "1.0.0"
+    highUrl: string
+    lowUrl: ?string
+    highHandler: ?PageDataHandler
+    lowHandler: ?PageDataHandler
+
+    constructor({
+        highUrl,
+        lowUrl = null,
+        highHandler = null,
+        lowHandler = null,
+    }: {
+        highUrl: string,
+        lowUrl?: ?string,
+        highHandler?: ?PageDataHandler,
+        lowHandler?: ?PageDataHandler,
+    }) {
+        this.highUrl = highUrl;
+        this.lowUrl = lowUrl;
+        this.highHandler = highHandler;
+        this.lowHandler = lowHandler;
+    }
+}
+
+class ChapterData {
+    version: string = "2.0.0"
+
+    pages: Array<PageData>
+
+    constructor({ pages }: { pages: Array<PageData> }) {
+        this.pages = pages
     }
 }
 
 class MangaSeries {
-    name = "";
+    name: string;
     // Name is the name of the manga series.
     // 
-    identifier = "";
+    identifier: string;
     // Identifier is the id or unique identifier for this manga series on this
     // source.
     // 
-    ranking = -1;
+    coverUrl: ?string;
+    // NOTE: Optional
+    // The coverUrl if one exists. Used to help users identify best matches.
+    ranking: number;
     // NOTE: Optional
     // Ranking is the a representation of the likelyhood of this result being
     // the correct match. 0 being the best match and Number.MAX_SAFE_INTEGER
     // being the worst match. All negative numbers will be treated as equal.
     // 
-    coverUrl = null;
-    // NOTE: Optional
-    // The coverUrl if one exists. Used to help users identify best matches.
 
-    constructor({ name, identifier, ranking = -1, coverUrl = null }) {
+    constructor({
+        name,
+        identifier,
+        coverUrl = null,
+        ranking = -1,
+    }: {
+        name: string,
+        identifier: string,
+        coverUrl?: ?string,
+        ranking?: number,
+    }) {
         this.name = name;
         this.identifier = identifier;
-        this.ranking = ranking;
         this.coverUrl = coverUrl;
+        this.ranking = ranking;
     }
 }
 
 class MangaSeriesList {
-    results = [];
+    results: Array<MangaSeries> = [];
     // Results is the list of all MangaSeries objects which match this query in
     // a searchManga call.
 
-    constructor({ results = [] }) {
+    constructor({ results = [] }: { results: Array<MangaSeries> }) {
         this.results = results;
-    }
-
-    addResult({ name, identifier, ranking = -1 }) {
-        this.results.push(MangaSeries({ name, identifier }));
     }
 }
 
-export let EXTENSION_ID="0b035abc-ec01-11eb-850d-784f43a622c7";
+export const EXTENSION_ID: string="52b3a063-ce43-4c21-ae37-4b7cae945306";
 
-export async function searchManga(seriesName, offset=0, limit=10) {
+const BASE_URL = "https://api.mangadex.org";
+
+export async function searchManga(
+    seriesName: string,
+    offset: number=0,
+    limit: number=100
+): Promise<MangaSeriesList> {
+    limit = Math.min(limit, 100);
     console.debug("searchManga called.");
-    let finalUrl = new URL("https://api.mangadex.org/manga");
+    let finalUrl = new URL(`${BASE_URL}/manga`);
     console.debug("Initialized url.", { url: finalUrl });
     let searchParams = new URLSearchParams({
         offset: offset,
         limit: limit,
         title: seriesName,
-        'includes[]': "cover_art",
+        "includes[]": "cover_art",
     });
     finalUrl.search = searchParams.toString();
     console.debug("Added search params.", { url: finalUrl });
 
     let response = await fetch(finalUrl);
     let json = await response.json();
+
+    console.debug("Received response.", { response });
     
-    let results = json.data.map(result => {
+    let results = json.data.map((result, i) => {
         const id = result.id;
 
         let title = result.attributes.title.en;
@@ -160,9 +216,10 @@ export async function searchManga(seriesName, offset=0, limit=10) {
         }
 
         return new MangaSeries({
-            identifier: id,
             name: title,
+            identifier: id,
             coverUrl: coverUrl,
+            ranking: i,
         })
     }).filter(x => x);
 
@@ -171,75 +228,30 @@ export async function searchManga(seriesName, offset=0, limit=10) {
     });
 }
 
-async function resolveGroupId(groupId) {
-    console.debug(`Resolving group with id '${groupId}`);
-    const scanalationGroupUrl = `https://api.mangadex.org/group/${groupId}`;
-    const resp = await fetch(scanalationGroupUrl);
-    const json = await resp.json();
-    const group = json.data.attributes;
-    console.debug(`Found group`, group);
-    return group; 
-}
-
-async function normalizeChapterNumbers(json) {
-    console.log("Normalizing chapter numbers...");
-    const sortedVolumeNumbers = Object.keys(json.volumes).sort((lhs, rhs) => {
-        let lhInt = parseInt(lhs);
-        let rhInt = parseInt(rhs);
-
-        if (lhInt < rhInt) {
-            return -1;
-        } else if (lhInt > rhInt) {
-            return 1;
-        }
-
-        return 0;
-    });
-
-    const idAbsoluteChapterNumbers = {};
-
-    let previousTotal = 0;
-    for (const volume of sortedVolumeNumbers) {
-        console.log(`Processing volume ${volume}`);
-        const newChaps = json.volumes[volume].chapters;
-
-        let largestNumber = 0;
-        for (const chapNumber in newChaps) {
-            console.log(`Processing chapter ${chapNumber}`);
-            const chap = newChaps[chapNumber];
-            let majorNumber = 0;
-            if (chap.chapter.indexOf(".") != -1) {
-                const [majorStr, minorStr] = chap.chapter.split(".");
-                const major = parseInt(majorStr);
-                majorNumber = major;
-                idAbsoluteChapterNumbers[chap.id] = `${major + previousTotal}.${minorStr}`
-            } else if (!isNaN(chap.chapter)) {
-                const number = parseInt(chap.chapter);
-                idAbsoluteChapterNumbers[chap.id] = `${number + previousTotal}`;
-                majorNumber = number;
-            }
-            console.log(`Adjusted chapter ${idAbsoluteChapterNumbers[chap.id]}`);
-            largestNumber = Math.max(largestNumber, majorNumber);
-        }
-        previousTotal += largestNumber + 1;
-    }
-
-    console.log("Absolute chapter numbers.", { chapNumbers: idAbsoluteChapterNumbers });
-    return idAbsoluteChapterNumbers;
-}
-
 export async function listChapters(
-    seriesIdentifier, offset=0, limit=500, since=null, order='asc'
-) {
+    seriesIdentifier: string,
+    offset: number=0,
+    limit: number=100,
+    since: ?Date=null,
+    order: string="asc"
+): Promise<ChapterList> {
+    console.debug("listChapters called.", {
+        seriesIdentifier,
+        offset,
+        limit,
+        since,
+        order,
+    })
+
     const languages = ["en"];
 
     let finalUrl = new URL(`https://api.mangadex.org/manga/${seriesIdentifier}/feed`);
     let searchParams = new URLSearchParams({
-        'translatedLanguage[]': languages,
+        "translatedLanguage[]": languages,
         offset: offset,
         limit: limit,
-        'order[chapter]': order,
-        'includes[]': "scanlation_group",
+        "order[chapter]": order,
+        "includes[]": "scanlation_group",
         includeEmptyPages: 0,
         includeFuturePublishAt: 0,
         includeExternalUrl: 0,
@@ -250,21 +262,23 @@ export async function listChapters(
     }
     finalUrl.search = searchParams.toString();
 
+    console.debug("Search params for initial call", { params: searchParams.toString() });
+
     let response = await fetch(finalUrl);
     let chapJson = await response.json();
 
     if(chapJson.data.length == 0) {
-        console.log(`No new chapters found for series.`, { id: seriesIdentifier });
+        console.log("No new chapters found for series.", { id: seriesIdentifier });
         return new ChapterList({
             chapters: [],
         })
     }
 
-    finalUrl = new URL(`https://api.mangadex.org/manga/${seriesIdentifier}/aggregate`);
+    finalUrl = new URL(`${BASE_URL}/manga/${seriesIdentifier}/aggregate`);
     searchParams = new URLSearchParams({
-        'translatedLanguage[]': languages,
+        "translatedLanguage[]": languages,
     });
-    console.debug("Final search params.", { params: searchParams.toString() });
+    console.debug("Search params for final call.", { params: searchParams.toString() });
     finalUrl.search = searchParams.toString();
 
     response = await fetch(finalUrl);
@@ -286,9 +300,6 @@ export async function listChapters(
     }
 
     console.log("Absolute chapter numbers (main).", { chapNumbers: idAbsoluteChapterNumbers });
-
-
-    const groupIdMap = {};
 
     const chapters = await Promise.all(chapJson.data.map(async result => {
         const id = result.id;
@@ -321,11 +332,11 @@ export async function listChapters(
             updated: updatedAt,
             published: publishAt,
         });
-        console.debug(`Creating final ChapterListItem`, chapItem);
+        console.debug("Creating final ChapterListItem", chapItem);
         return chapItem;
     }));
 
-    console.debug(`Creating final chapter list.`, { chapters });
+    console.debug("Creating final chapter list.", { chapters });
     const chapList = new ChapterList({
         chapters: chapters,
     });
@@ -333,25 +344,29 @@ export async function listChapters(
     return chapList;
 }
 
-export async function getChapter(chapterIdentifier) {
-    const url = `https://api.mangadex.org/at-home/server/${chapterIdentifier}?forcePort443=true`
+export async function getChapter(chapterIdentifier: string): Promise<ChapterData> {
+    const url = `${BASE_URL}/at-home/server/${chapterIdentifier}?forcePort443=true`
     console.debug(`Chapter URL: ${url}`);
     let response = await fetch(url);
     if(!response.ok) {
         let respText = ""
         try {
             respText = await response.text;
-        } catch {}
+        } catch (err) {
+            console.error("Failed to read error response from request.", err);
+        }
 
         throw new Error(`Bad response from server: ${response.status} - ${response.statusText}\n${respText}`);
     }
 
     let json = await response.json();
-    console.debug(`Chapter response: ${json}`);
     const { baseUrl, chapter } = json;
-    const { data: partialUrls, hash } = chapter;
-    let fullUrls = partialUrls.map(url => (
-        `${baseUrl}/data/${hash}/${url}`
+    const { data: highURLs, "dataSaver": lowURLs, hash } = chapter;
+    let pages = highURLs.map((high, i) => (
+        new PageData({
+            highUrl: `${baseUrl}/data/${hash}/${high}`,
+            lowUrl: `${baseUrl}/data-saver/${hash}/${lowURLs[i]}`,
+        })
     ))
-    return new ChapterData({ pageUrls: fullUrls });
+    return new ChapterData({ pages });
 }
