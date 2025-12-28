@@ -163,8 +163,6 @@ class MangaSeriesList {
     }
 }
 
-export const EXTENSION_ID: string="52b3a063-ce43-4c21-ae37-4b7cae945306";
-
 const BASE_URL = "https://api.mangadex.org";
 
 export async function searchManga(
